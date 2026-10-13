@@ -1,4 +1,4 @@
-/*! messenger-tracker v1.1.0 | MIT | https://github.com/trendbender/messenger-tracker
+/*! messenger-tracker v1.2.0 | MIT | https://github.com/trendbender/messenger-tracker
  * Which messenger button was clicked, where on the page, and on which page.
  * Sends the click to Yandex Metrica (reachGoal + visit params), GA4 (gtag) and GTM (dataLayer).
  * No dependencies, ES5, 4 KB minified (2 KB gzip). Does NOT load any counter itself: if the counter is not
@@ -86,14 +86,17 @@
     }
     if (ymId && typeof w.ym === 'function') {
       pending += toMetrica(one);
-    } else if (ymId && !done) {
+    } else if (ymId) {
       // Counter loaded late (GTM on first interaction, consent banner): wait for it, then send.
+      // Same-tab navigation waits at most waitNavigate ms, a new tab up to waitCounter ms.
       // If it never shows up (cookies declined), nothing is sent.
-      var waited = 0, step = 200, limit = cfg.waitCounter != null ? cfg.waitCounter : 5000;
+      var waited = 0, step = 100;
+      var limit = done ? (cfg.waitNavigate != null ? cfg.waitNavigate : 1000) : (cfg.waitCounter != null ? cfg.waitCounter : 5000);
+      if (done) pending++; // hold navigation until the counter shows up or we give up
       var timer = setInterval(function () {
         waited += step;
-        if (typeof w.ym === 'function') { clearInterval(timer); toMetrica(); }
-        else if (waited >= limit) clearInterval(timer);
+        if (typeof w.ym === 'function') { clearInterval(timer); if (done) { pending += toMetrica(one); one(); } else toMetrica(); }
+        else if (waited >= limit) { clearInterval(timer); if (done) one(); }
       }, step);
     }
     // GA4
@@ -131,7 +134,9 @@
     var gone = false;
     function go() { if (!gone) { gone = true; w.location.href = a.href; } }
     send(info, go);
-    setTimeout(go, cfg.timeout || 300);
+    // safety net: never hold the visitor longer than this, even if the counter never answers
+    var late = cfg.ym && typeof w.ym !== 'function';
+    setTimeout(go, (cfg.timeout || 300) + (late ? (cfg.waitNavigate != null ? cfg.waitNavigate : 1000) : 0));
   }
 
   // Optional offline attribution: the code shows up in the chat itself
@@ -163,5 +168,5 @@
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', decorate); else decorate();
   }
 
-  w.MessengerTracker = { version: '1.1.0', config: cfg, scan: scan, describe: describe };
+  w.MessengerTracker = { version: '1.2.0', config: cfg, scan: scan, describe: describe };
 })(window, document);

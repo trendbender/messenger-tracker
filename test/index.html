@@ -21,6 +21,7 @@
     <a id="c-bot" href="https://t.me/shop_bot" target="_blank">bot</a>
     <a id="c-wa-text" href="https://wa.me/79990000001" target="_blank">wa text</a>
     <a id="c-same" href="https://t.me/sametab">same tab</a>
+    <a id="c-same2" href="https://t.me/sametab2">same tab, late counter</a>
   </main>
   <footer><div class="social"><a id="f-ya" href="https://yandex.ru/chat#/user/1" target="_blank">ya</a></div></footer>
   <a id="widget" class="float-widget" href="whatsapp://send?phone=7999">widget</a>
@@ -58,11 +59,11 @@ window.addEventListener('load', function () {
   var page = location.pathname;
   var T = MessengerTracker;
 
-  eq('version', T.version, '1.1.0');
+  eq('version', T.version, '1.2.0');
   eq('config from <script data-*>', [T.config.ym, T.config.goals], [12345, ['messenger_click', 'messenger_%place%']]);
 
   var s = T.scan().map(function (i) { return i.id; });
-  eq('scan finds only messenger links', s, ['telegram_header', 'whatsapp_content', 'max_price_block', 'hero_cta', 'vk_content', 'telegram_content', 'whatsapp_content', 'telegram_content', 'yandex_messenger_footer', 'whatsapp_widget']);
+  eq('scan finds only messenger links', s, ['telegram_header', 'whatsapp_content', 'max_price_block', 'hero_cta', 'vk_content', 'telegram_content', 'whatsapp_content', 'telegram_content', 'telegram_content', 'yandex_messenger_footer', 'whatsapp_widget']);
 
   var c = click('c-wa');
   eq('wa.me in <main>: two goals', c.filter(function (x) { return x[0] === 'ym'; }).map(function (x) { return x.slice(1, 4); }),
@@ -109,11 +110,17 @@ window.addEventListener('load', function () {
   // counter appears after the click (GTM loads Metrica on first interaction): hit is sent once ym shows up
   window.ym = undefined; calls = [];
   click('f-ya');
+  var link2 = document.getElementById('c-same2');
+  link2.addEventListener('click', function () { link2.setAttribute('href', '#mt-nav'); }, { once: true });
+  var held = !link2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+  eq('late counter, same tab: navigation held', [held, location.hash], [true, '']);
   eq('late counter: nothing sent before ym exists', calls.filter(function (x) { return x[0] === 'ym'; }).length, 0);
   setTimeout(function () { window.ym = saved; }, 300);
   setTimeout(function () {
     var late = calls.filter(function (x) { return x[0] === 'ym' && x[4] && x[4].messenger_click && x[4].messenger_click.yandex_messenger; });
     eq('late counter: hit sent after ym appears', late.length && late[0][3], 'messenger_click');
+    var late2 = calls.filter(function (x) { return x[0] === 'ym' && x[4] && x[4].messenger_click && x[4].messenger_click.telegram; });
+    eq('late counter, same tab: hit sent, then navigated', [late2.length && late2[0][3], location.hash], ['messenger_click', '#mt-nav']);
     out.innerHTML += '\n' + passed + ' passed, ' + failed + ' failed\n';
     document.title = failed ? 'FAIL ' + failed : 'PASS ' + passed;
     window.__result = { passed: passed, failed: failed };
