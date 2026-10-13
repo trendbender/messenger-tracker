@@ -1,4 +1,4 @@
-/*! messenger-tracker v1.0.0 | MIT | https://github.com/trendbender/messenger-tracker
+/*! messenger-tracker v1.1.0 | MIT | https://github.com/trendbender/messenger-tracker
  * Which messenger button was clicked, where on the page, and on which page.
  * Sends the click to Yandex Metrica (reachGoal + visit params), GA4 (gtag) and GTM (dataLayer).
  * No dependencies, ES5, 4 KB minified (2 KB gzip). Does NOT load any counter itself: if the counter is not
@@ -77,14 +77,24 @@
 
     // Yandex Metrica: one or more JS goals + nested visit params goal > messenger > place > page
     var ymId = cfg.ym;
-    if (ymId && typeof w.ym === 'function') {
+    function toMetrica(cb) {
       var goals = cfg.goals || ['messenger_click'];
       var key = cfg.paramsKey || 'messenger_click';
       var params = {}; params[key] = {}; params[key][info.messenger] = {}; params[key][info.messenger][info.place] = info.page;
-      for (var i = 0; i < goals.length; i++) {
-        pending++;
-        w.ym(ymId, 'reachGoal', fill(goals[i], info), i === 0 ? params : undefined, one);
-      }
+      for (var i = 0; i < goals.length; i++) w.ym(ymId, 'reachGoal', fill(goals[i], info), i === 0 ? params : undefined, cb);
+      return goals.length;
+    }
+    if (ymId && typeof w.ym === 'function') {
+      pending += toMetrica(one);
+    } else if (ymId && !done) {
+      // Counter loaded late (GTM on first interaction, consent banner): wait for it, then send.
+      // If it never shows up (cookies declined), nothing is sent.
+      var waited = 0, step = 200, limit = cfg.waitCounter != null ? cfg.waitCounter : 5000;
+      var timer = setInterval(function () {
+        waited += step;
+        if (typeof w.ym === 'function') { clearInterval(timer); toMetrica(); }
+        else if (waited >= limit) clearInterval(timer);
+      }, step);
     }
     // GA4
     if (cfg.gtag !== false && typeof w.gtag === 'function') {
@@ -153,5 +163,5 @@
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', decorate); else decorate();
   }
 
-  w.MessengerTracker = { version: '1.0.0', config: cfg, scan: scan, describe: describe };
+  w.MessengerTracker = { version: '1.1.0', config: cfg, scan: scan, describe: describe };
 })(window, document);

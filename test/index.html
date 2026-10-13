@@ -58,7 +58,7 @@ window.addEventListener('load', function () {
   var page = location.pathname;
   var T = MessengerTracker;
 
-  eq('version', T.version, '1.0.0');
+  eq('version', T.version, '1.1.0');
   eq('config from <script data-*>', [T.config.ym, T.config.goals], [12345, ['messenger_click', 'messenger_%place%']]);
 
   var s = T.scan().map(function (i) { return i.id; });
@@ -106,9 +106,18 @@ window.addEventListener('load', function () {
   var notCancelled = link.dispatchEvent(ev);
   eq('same-tab http link: default prevented, hit sent first', [notCancelled, calls[0] && calls[0][3]], [false, 'messenger_click']);
 
-  out.innerHTML += '\n' + passed + ' passed, ' + failed + ' failed\n';
-  document.title = failed ? 'FAIL ' + failed : 'PASS ' + passed;
-  window.__result = { passed: passed, failed: failed };
+  // counter appears after the click (GTM loads Metrica on first interaction): hit is sent once ym shows up
+  window.ym = undefined; calls = [];
+  click('f-ya');
+  eq('late counter: nothing sent before ym exists', calls.filter(function (x) { return x[0] === 'ym'; }).length, 0);
+  setTimeout(function () { window.ym = saved; }, 300);
+  setTimeout(function () {
+    var late = calls.filter(function (x) { return x[0] === 'ym' && x[4] && x[4].messenger_click && x[4].messenger_click.yandex_messenger; });
+    eq('late counter: hit sent after ym appears', late.length && late[0][3], 'messenger_click');
+    out.innerHTML += '\n' + passed + ' passed, ' + failed + ' failed\n';
+    document.title = failed ? 'FAIL ' + failed : 'PASS ' + passed;
+    window.__result = { passed: passed, failed: failed };
+  }, 900);
 });
 </script>
 </body>

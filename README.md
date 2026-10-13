@@ -25,7 +25,7 @@ A tiny dependency-free script (4 KB minified, 2 KB gzip) that sends every click 
 Или прямо с CDN (jsDelivr, версия зафиксирована тегом, `.min.js` jsDelivr сжимает сам):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/trendbender/messenger-tracker@1.0.0/messenger-tracker.min.js"
+<script src="https://cdn.jsdelivr.net/gh/trendbender/messenger-tracker@1.1.0/messenger-tracker.min.js"
         data-ym="12345678" data-goals="messenger_click,messenger_%place%" defer></script>
 ```
 
@@ -65,6 +65,7 @@ window.MessengerTrackerConfig = {
   places: [['.chat-widget', 'widget'], ['.price-table', 'prices']], // места по CSS-селектору, без правки разметки
   paramsKey: 'messenger_click',  // корень дерева параметров визита
   gtag: true, dataLayer: true,   // false, чтобы отключить
+  waitCounter: 5000,             // мс: ждать счётчик, если он ещё не загружен (GTM грузит Метрику по первому действию)
   whatsappText: '',              // необязательно: предзаполненный текст wa.me, напр. 'Здравствуйте! (%id%)'
   telegramStart: '',             // необязательно: ?start= для Telegram-ботов, напр. 'site_%place%'
   messengers: [['viber_web', /viber\.com\/chat/i]]  // свои мессенджеры
@@ -78,6 +79,7 @@ window.MessengerTrackerConfig = {
 
 - **Счётчик скрипт не загружает.** Если Метрики на странице нет (например, посетитель отказался от cookie), в Метрику ничего не уходит. Согласие на cookie остаётся за сайтом.
 - **Страница без query string:** в параметры попадает только путь, чтобы не утекли персональные данные из адреса.
+- **Счётчик появился позже клика** (GTM грузит Метрику только по первому действию посетителя, баннер согласия): скрипт ждёт `ym` до 5 секунд и отправляет цель, как только он появится. Не появился, значит не отправляет.
 - **Ссылки в той же вкладке** (без `target="_blank"`): переход ждёт отправки цели, но не дольше 300 мс.
 - **Средняя кнопка мыши** тоже считается, правая нет.
 - **Предзаполненный текст и `?start=` выключены по умолчанию.** Telegram передаёт `start` только ботам, у личных аккаунтов параметр теряется. Текст в WhatsApp пациент видит и может стереть, а в деликатных темах (медицина, юристы) код в первом сообщении отпугивает. Включайте, только если менеджеру нужно видеть источник прямо в чате.
