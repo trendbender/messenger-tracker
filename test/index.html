@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>messenger-tracker tests</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;background:#fff;color:#111;margin:24px}.ok{color:#080}.fail{color:#c00;font-weight:bold}#fixture{display:none}</style>
+</head>
+<body>
+<h1>messenger-tracker tests</h1>
+<pre id="out"></pre>
+
+<div id="fixture">
+  <header><a id="h-tg" href="https://t.me/someone" target="_blank">tg</a></header>
+  <main>
+    <a id="c-wa" href="https://wa.me/79990000000" target="_blank">wa</a>
+    <div data-mt-place="price_block"><a id="p-max" href="https://max.ru/u/abc" target="_blank">max</a></div>
+    <a id="c-own" href="https://api.whatsapp.com/send?phone=7999" data-mt-id="hero_cta" target="_blank">wa2</a>
+    <a id="c-site" href="https://example.com/" target="_blank">not a messenger</a>
+    <a id="c-vkgroup" href="https://vk.com/somegroup" target="_blank">vk group, not a messenger</a>
+    <a id="c-vkim" href="https://vk.me/somegroup" target="_blank">vk im</a>
+    <a id="c-bot" href="https://t.me/shop_bot" target="_blank">bot</a>
+    <a id="c-wa-text" href="https://wa.me/79990000001" target="_blank">wa text</a>
+    <a id="c-same" href="https://t.me/sametab">same tab</a>
+  </main>
+  <footer><div class="social"><a id="f-ya" href="https://yandex.ru/chat#/user/1" target="_blank">ya</a></div></footer>
+  <a id="widget" class="float-widget" href="whatsapp://send?phone=7999">widget</a>
+</div>
+
+<script>
+  // mocks: record everything the tracker sends
+  var calls = [];
+  window.ym = function () { var a = [].slice.call(arguments); calls.push(['ym'].concat(a)); var cb = a[4]; if (typeof cb === 'function') setTimeout(cb, 5); };
+  window.gtag = function () { calls.push(['gtag'].concat([].slice.call(arguments))); };
+  window.dataLayer = []; window.dataLayer.push = function (o) { calls.push(['dl', o]); return Array.prototype.push.call(this, o); };
+  window.MessengerTrackerConfig = {
+    places: [['.float-widget', 'widget']],
+    whatsappText: 'Hello! (%id%)',
+    telegramStart: 'site_%place%'
+  };
+</script>
+<script src="../messenger-tracker.js" data-ym="12345" data-goals="messenger_click,messenger_%place%"></script>
+<script>
+window.addEventListener('load', function () {
+  var out = document.getElementById('out'), failed = 0, passed = 0;
+  function eq(name, got, exp) {
+    var g = JSON.stringify(got), e = JSON.stringify(exp), ok = g === e;
+    ok ? passed++ : failed++;
+    out.innerHTML += '<span class="' + (ok ? 'ok' : 'fail') + '">' + (ok ? 'ok  ' : 'FAIL') + '</span> ' + name + (ok ? '' : '\n     got ' + g + '\n     exp ' + e) + '\n';
+  }
+  function click(id, opts) {
+    calls = [];
+    var ev = new MouseEvent(opts && opts.type || 'click', Object.assign({ bubbles: true, cancelable: true, button: 0 }, opts || {}));
+    // keep the test page in place: block real navigation of target=_blank links
+    document.addEventListener('click', function stop(e) { e.preventDefault(); document.removeEventListener('click', stop); });
+    document.getElementById(id).dispatchEvent(ev);
+    return calls.slice();
+  }
+  var page = location.pathname;
+  var T = MessengerTracker;
+
+  eq('version', T.version, '1.0.0');
+  eq('config from <script data-*>', [T.config.ym, T.config.goals], [12345, ['messenger_click', 'messenger_%place%']]);
+
+  var s = T.scan().map(function (i) { return i.id; });
+  eq('scan finds only messenger links', s, ['telegram_header', 'whatsapp_content', 'max_price_block', 'hero_cta', 'vk_content', 'telegram_content', 'whatsapp_content', 'telegram_content', 'yandex_messenger_footer', 'whatsapp_widget']);
+
+  var c = click('c-wa');
+  eq('wa.me in <main>: two goals', c.filter(function (x) { return x[0] === 'ym'; }).map(function (x) { return x.slice(1, 4); }),
+    [[12345, 'reachGoal', 'messenger_click'], [12345, 'reachGoal', 'messenger_content']]);
+  eq('visit params tree goal > messenger > place > page', c[0][4], { messenger_click: { whatsapp: { content: page } } });
+  eq('params only on first goal', c[1][4], undefined);
+  eq('GA4 event', c.filter(function (x) { return x[0] === 'gtag'; })[0], ['gtag', 'event', 'messenger_click', { messenger: 'whatsapp', place: 'content', link_id: 'whatsapp_content', page_path: page }]);
+  eq('dataLayer push', c.filter(function (x) { return x[0] === 'dl'; })[0][1].mt_id, 'whatsapp_content');
+
+  eq('data-mt-place on ancestor', click('p-max')[0][4], { messenger_click: { max: { price_block: page } } });
+  eq('data-mt-id overrides id', click('c-own').filter(function (x) { return x[0] === 'gtag'; })[0][3].link_id, 'hero_cta');
+  eq('header landmark', click('h-tg')[1][3], 'messenger_header');
+  eq('footer landmark + yandex messenger', click('f-ya')[0][4], { messenger_click: { yandex_messenger: { footer: page } } });
+  eq('cfg.places selector + whatsapp: scheme', click('widget')[0][4], { messenger_click: { whatsapp: { widget: page } } });
+  eq('ordinary link ignored', click('c-site').length, 0);
+  eq('vk group page ignored', click('c-vkgroup').length, 0);
+  eq('vk.me counted', click('c-vkim')[0][4], { messenger_click: { vk: { content: page } } });
+  eq('right button ignored', click('c-wa', { type: 'auxclick', button: 2 }).length, 0);
+  eq('middle click counted', click('c-wa', { type: 'auxclick', button: 1 }).length, 4);
+
+  eq('whatsappText decorates wa.me/<number>', document.getElementById('c-wa-text').getAttribute('href'), 'https://wa.me/79990000001?text=' + encodeURIComponent('Hello! (whatsapp_content)'));
+  eq('telegramStart only for bots', [document.getElementById('c-bot').getAttribute('href'), document.getElementById('h-tg').getAttribute('href')], ['https://t.me/shop_bot?start=site_content', 'https://t.me/someone']);
+
+  // no counter on the page (cookies declined) -> nothing sent to Metrica, no errors
+  var saved = window.ym; window.ym = undefined;
+  eq('no ym -> no Metrica hit', click('c-wa').filter(function (x) { return x[0] === 'ym'; }).length, 0);
+  window.ym = saved;
+
+  // custom DOM event
+  var got = null; document.addEventListener('messenger-tracker:click', function h(e) { got = e.detail.id; document.removeEventListener('messenger-tracker:click', h); });
+  click('f-ya'); eq('CustomEvent messenger-tracker:click', got, 'yandex_messenger_footer');
+
+  // same-tab link: navigation waits for Metrica callback (we intercept by checking defaultPrevented)
+  calls = [];
+  var ev = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+  var origHref = Object.getOwnPropertyDescriptor(window, 'location');
+  document.getElementById('c-same').addEventListener('click', function (e) { /* bubble phase: tracker already ran in capture */ }, { once: true });
+  // replace navigation with a no-op by making the link point nowhere after tracker reads it
+  var link = document.getElementById('c-same');
+  link.addEventListener('click', function () { link.setAttribute('href', '#'); }, { once: true });
+  var notCancelled = link.dispatchEvent(ev);
+  eq('same-tab http link: default prevented, hit sent first', [notCancelled, calls[0] && calls[0][3]], [false, 'messenger_click']);
+
+  out.innerHTML += '\n' + passed + ' passed, ' + failed + ' failed\n';
+  document.title = failed ? 'FAIL ' + failed : 'PASS ' + passed;
+  window.__result = { passed: passed, failed: failed };
+});
+</script>
+</body>
+</html>

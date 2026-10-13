@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>messenger-tracker: пример</title>
+<style>
+  body{font:16px/1.5 system-ui,sans-serif;background:#fff;color:#111;margin:0}
+  header,footer,main{padding:16px 24px}header,footer{background:#f3f4f6}
+  a{margin-right:12px}.chat-widget{position:fixed;right:16px;bottom:16px;background:#25d366;color:#fff;padding:12px 16px;border-radius:24px;text-decoration:none}
+  #log{background:#111;color:#0f0;padding:12px;min-height:80px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>Шапка: <a href="https://t.me/username" target="_blank">Telegram</a></header>
+<main>
+  <p>Нажмите любую кнопку, ниже появится то, что ушло бы в Метрику.</p>
+  <div data-mt-place="prices">Блок цен: <a href="https://wa.me/79990000000" target="_blank">Уточнить цену в WhatsApp</a></div>
+  <pre id="log"></pre>
+</main>
+<footer data-mt-place="footer">Подвал:
+  <a href="https://wa.me/79990000000" target="_blank">WhatsApp</a>
+  <a href="https://t.me/username" target="_blank">Telegram</a>
+  <a href="https://max.ru/u/xxxx" target="_blank">MAX</a>
+  <a href="https://yandex.ru/chat#/user/xxxx" target="_blank">Яндекс Мессенджер</a>
+</footer>
+<a class="chat-widget" data-mt-place="widget" href="https://wa.me/79990000000" target="_blank">Задайте вопрос</a>
+
+<script>
+  // Демо: вместо настоящего счётчика печатаем вызовы. На сайте этого блока нет, там стоит код Метрики.
+  window.ym = function (id, method, goal, params) {
+    document.getElementById('log').textContent += 'ym(' + id + ', "' + method + '", "' + goal + '"' + (params ? ', ' + JSON.stringify(params) : '') + ')\n';
+  };
+</script>
+<script src="../messenger-tracker.js" data-ym="12345678" data-goals="messenger_click,messenger_%place%"></script>
+<script>
+  document.addEventListener('click', function (e) { if (e.target.closest('a')) e.preventDefault(); }); // демо: не уходим со страницы
+</script>
+</body>
+</html>
