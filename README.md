@@ -1,7 +1,7 @@
 # messenger-tracker
 
 **Which messenger button was clicked, where on the page, and on which page.**
-A tiny dependency-free script (4 KB minified, 2 KB gzip) that sends every click on a WhatsApp, Telegram, MAX, Yandex Messenger, VK or Viber link to Yandex Metrica, GA4 and GTM, with the place of the button attached.
+A tiny dependency-free script (6 KB minified, 3 KB gzip) that sends every click on a WhatsApp, Telegram, MAX, Yandex Messenger, VK or Viber link to Yandex Metrica, GA4 and GTM, with the place of the button attached.
 
 По-русски: сайт с кнопками «Написать в WhatsApp / Telegram / MAX» обычно видит в Метрике только «был переход в WhatsApp». Какая кнопка сработала (шапка, подвал, плавающий виджет, блок цен) и на какой странице, не видно: у всех кнопок один и тот же адрес. Скрипт добавляет к каждому клику место и страницу.
 

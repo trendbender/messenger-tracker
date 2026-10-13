@@ -1,7 +1,7 @@
 /*! messenger-tracker v1.3.0 | MIT | https://github.com/trendbender/messenger-tracker
  * Which messenger button was clicked, where on the page, and on which page.
  * Sends the click to Yandex Metrica (reachGoal + visit params), GA4 (gtag) and GTM (dataLayer).
- * No dependencies, ES5, 4 KB minified (2 KB gzip). Does NOT load any counter itself: if the counter is not
+ * No dependencies, ES5, 6 KB minified (3 KB gzip). Does NOT load any counter itself: if the counter is not
  * on the page (e.g. the visitor declined cookies), nothing is sent.
  */
 (function (w, d) {
