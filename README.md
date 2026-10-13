@@ -25,7 +25,7 @@ A tiny dependency-free script (4 KB minified, 2 KB gzip) that sends every click 
 Или прямо с CDN (jsDelivr, версия зафиксирована тегом, `.min.js` jsDelivr сжимает сам):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/trendbender/messenger-tracker@1.2.0/messenger-tracker.min.js"
+<script src="https://cdn.jsdelivr.net/gh/trendbender/messenger-tracker@1.3.0/messenger-tracker.min.js"
         data-ym="12345678" data-goals="messenger_click,messenger_%place%" defer></script>
 ```
 
@@ -53,7 +53,7 @@ A tiny dependency-free script (4 KB minified, 2 KB gzip) that sends every click 
 |---|---|
 | `data-ym` | номер счётчика Метрики |
 | `data-goals` | цели через запятую, `%place%`, `%messenger%`, `%id%` подставляются |
-| `data-debug` | печатать каждый клик в консоль (или `?mt_debug=1` в адресе) |
+| `data-debug` | печатать каждый клик в консоль |
 
 Или объектом до подключения скрипта:
 
@@ -88,6 +88,8 @@ window.MessengerTrackerConfig = {
 
 ## Проверка на своём сайте
 
+Откройте любую страницу с `?mt_debug=1` в адресе (например `https://site.ru/kontakty/?mt_debug=1`) и нажмите кнопки мессенджеров. В режиме проверки ссылки не открываются, а внизу слева на каждый клик всплывает плашка: мессенджер, место, страница и статус отправки, вплоть до «✓ Метрика 12345678 приняла: messenger_click, messenger_footer». Если счётчика нет (например, не дано согласие на cookie), плашка так и скажет. Клики в этом режиме настоящие и попадают в Метрику: удобно для приёмки, записи видео и показа клиенту.
+
 В консоли браузера:
 
 ```js
@@ -98,7 +100,7 @@ MessengerTracker.scan()   // все ссылки в мессенджеры на 
 
 ## Тесты
 
-`test/index.html` в браузере или без окна:
+`test/index.html` и `test/check.html?mt_debug=1` в браузере или без окна:
 
 ```bash
 bash test/run.sh

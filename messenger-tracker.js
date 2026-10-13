@@ -1,4 +1,4 @@
-/*! messenger-tracker v1.2.0 | MIT | https://github.com/trendbender/messenger-tracker
+/*! messenger-tracker v1.3.0 | MIT | https://github.com/trendbender/messenger-tracker
  * Which messenger button was clicked, where on the page, and on which page.
  * Sends the click to Yandex Metrica (reachGoal + visit params), GA4 (gtag) and GTM (dataLayer).
  * No dependencies, ES5, 4 KB minified (2 KB gzip). Does NOT load any counter itself: if the counter is not
@@ -71,9 +71,31 @@
     return String(tpl).replace(/\{(\w+)\}|%(\w+)%/g, function (m, a, b) { var k = a || b; return info[k] != null ? info[k] : m; });
   }
 
+  // Check mode (?mt_debug=1 in the address): links do not open, every click shows a toast
+  // with what was sent and whether Metrica acknowledged it. For QA, screen recordings, clients.
+  var CHECK = /[?&]mt_debug=1/.test(w.location.search);
+
+  function toast(info) {
+    var box = d.getElementById('mt-check');
+    if (!box) {
+      box = d.createElement('div'); box.id = 'mt-check';
+      box.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;' +
+        'max-width:min(400px,calc(100vw - 24px));font:13px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif';
+      d.body.appendChild(box);
+    }
+    var el = d.createElement('div'), head = d.createElement('div'), line = d.createElement('div');
+    el.style.cssText = 'background:#111827;color:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.35)';
+    head.style.fontWeight = '600';
+    head.textContent = 'messenger-tracker: ' + info.messenger + ' · ' + info.place + ' · ' + info.page;
+    el.appendChild(head); el.appendChild(line); box.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 30000);
+    return function (text, color) { line.textContent = text; line.style.color = color || '#cbd5e1'; };
+  }
+
   function send(info, done) {
     var pending = 0, finished = false;
     function one() { if (--pending <= 0 && !finished) { finished = true; if (done) done(); } }
+    var say = CHECK && d.body ? toast(info) : null;
 
     // Yandex Metrica: one or more JS goals + nested visit params goal > messenger > place > page
     var ymId = cfg.ym;
@@ -81,7 +103,16 @@
       var goals = cfg.goals || ['messenger_click'];
       var key = cfg.paramsKey || 'messenger_click';
       var params = {}; params[key] = {}; params[key][info.messenger] = {}; params[key][info.messenger][info.place] = info.page;
-      for (var i = 0; i < goals.length; i++) w.ym(ymId, 'reachGoal', fill(goals[i], info), i === 0 ? params : undefined, cb);
+      var names = [], acked = 0;
+      function ack() {
+        if (say && ++acked === goals.length) say('✓ Метрика ' + ymId + ' приняла: ' + names.join(', '), '#86efac');
+        if (cb) cb();
+      }
+      for (var i = 0; i < goals.length; i++) {
+        names.push(fill(goals[i], info));
+        w.ym(ymId, 'reachGoal', names[i], i === 0 ? params : undefined, ack);
+      }
+      if (say) say('Метрика ' + ymId + ': отправлено ' + names.join(', ') + ', ждём ответ…');
       return goals.length;
     }
     if (ymId && typeof w.ym === 'function') {
@@ -93,11 +124,17 @@
       var waited = 0, step = 100;
       var limit = done ? (cfg.waitNavigate != null ? cfg.waitNavigate : 1000) : (cfg.waitCounter != null ? cfg.waitCounter : 5000);
       if (done) pending++; // hold navigation until the counter shows up or we give up
+      if (say) say('ждём счётчик Метрики…');
       var timer = setInterval(function () {
         waited += step;
         if (typeof w.ym === 'function') { clearInterval(timer); if (done) { pending += toMetrica(one); one(); } else toMetrica(); }
-        else if (waited >= limit) { clearInterval(timer); if (done) one(); }
+        else if (waited >= limit) {
+          clearInterval(timer); if (done) one();
+          if (say) say('✗ счётчик Метрики на странице не появился', '#fca5a5');
+        }
       }, step);
+    } else if (say) {
+      say('Метрика не настроена (data-ym)', '#fca5a5');
     }
     // GA4
     if (cfg.gtag !== false && typeof w.gtag === 'function') {
@@ -111,7 +148,7 @@
     }
     // Anyone else on the page
     try { d.dispatchEvent(new CustomEvent('messenger-tracker:click', { detail: info })); } catch (e) {}
-    if (cfg.debug || /[?&]mt_debug=1/.test(w.location.search)) {
+    if (cfg.debug || CHECK) {
       if (w.console) console.log('[messenger-tracker]', info);
     }
     if (!pending && done) done();
@@ -123,6 +160,7 @@
     if (!a) return;
     var info = describe(a);
     if (!info) return;
+    if (CHECK) { e.preventDefault(); send(info); return; } // check mode: count, but stay on the page
 
     // Same-tab http(s) navigation would unload the page before the hit leaves: wait for it (max 300 ms)
     var sameTab = e.type === 'click' && !e.defaultPrevented && e.button === 0 &&
@@ -168,5 +206,5 @@
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', decorate); else decorate();
   }
 
-  w.MessengerTracker = { version: '1.2.0', config: cfg, scan: scan, describe: describe };
+  w.MessengerTracker = { version: '1.3.0', config: cfg, scan: scan, describe: describe };
 })(window, document);

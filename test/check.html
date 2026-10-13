@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>messenger-tracker check mode tests</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;background:#fff;color:#111;margin:24px}.ok{color:#080}.fail{color:#c00;font-weight:bold}</style></head>
+<body>
+<h1>check mode (?mt_debug=1)</h1>
+<pre id="out"></pre>
+<main>
+  <a id="wa" href="https://wa.me/79990000000">wa, same tab</a>
+  <a id="tg" href="https://t.me/someone" target="_blank">tg, new tab</a>
+</main>
+<script>
+  var calls = [];
+  window.ym = function () { var a = [].slice.call(arguments); calls.push(a); if (typeof a[4] === 'function') setTimeout(a[4], 5); };
+  window.MessengerTrackerConfig = { waitCounter: 300 };
+</script>
+<script src="../messenger-tracker.js" data-ym="12345" data-goals="messenger_click,messenger_%place%"></script>
+<script>
+window.addEventListener('load', function () {
+  var out = document.getElementById('out'), failed = 0, passed = 0;
+  function eq(name, got, exp) {
+    var g = JSON.stringify(got), e = JSON.stringify(exp), ok = g === e; ok ? passed++ : failed++;
+    out.innerHTML += '<span class="' + (ok ? 'ok' : 'fail') + '">' + (ok ? 'ok  ' : 'FAIL') + '</span> ' + name + (ok ? '' : '\n     got ' + g + '\n     exp ' + e) + '\n';
+  }
+  function lines() { return [].map.call(document.querySelectorAll('#mt-check > div'), function (el) { return el.textContent; }); }
+  if (!/mt_debug=1/.test(location.search)) { out.textContent = 'open with ?mt_debug=1\n0 passed, 1 failed'; return; }
+
+  var notCancelled = document.getElementById('wa').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+  eq('check mode: same-tab link does not navigate', notCancelled, false);
+  eq('check mode: goals sent', calls.map(function (c) { return c[2]; }), ['messenger_click', 'messenger_content']);
+  eq('toast header', lines()[0].indexOf('messenger-tracker: whatsapp · content · ') === 0, true);
+
+  setTimeout(function () {
+    eq('toast shows Metrica acknowledged', /✓ Метрика 12345 приняла: messenger_click, messenger_content$/.test(lines()[0]), true);
+    window.ym = undefined;
+    var nc = document.getElementById('tg').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    eq('check mode: new-tab link does not open either', nc, false);
+    setTimeout(function () {
+      eq('toast shows missing counter', /✗ счётчик Метрики на странице не появился$/.test(lines()[1]), true);
+      out.innerHTML += '\n' + passed + ' passed, ' + failed + ' failed\n';
+    }, 600);
+  }, 100);
+});
+</script>
+</body>
+</html>
