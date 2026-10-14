@@ -25,7 +25,7 @@ A tiny dependency-free script (6 KB minified, 3 KB gzip) that sends every click 
 Или прямо с CDN (jsDelivr, версия зафиксирована тегом, `.min.js` jsDelivr сжимает сам):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/trendbender/messenger-tracker@1.3.0/messenger-tracker.min.js"
+<script src="https://cdn.jsdelivr.net/gh/trendbender/messenger-tracker@1.4.0/messenger-tracker.min.js"
         data-ym="12345678" data-goals="messenger_click,messenger_%place%" defer></script>
 ```
 
@@ -45,6 +45,22 @@ A tiny dependency-free script (6 KB minified, 3 KB gzip) that sends every click 
 
 Без разметки скрипт тоже работает: место определяется по `header`, `footer`, `nav`, `aside`, `main/article` (`content`), иначе `other`.
 
+## GA4 через Google Tag Manager
+
+Если GA4 стоит через GTM (`window.gtag` на странице нет), скрипт кладёт каждый клик в `dataLayer`:
+
+```js
+{ event: 'messenger_click', mt_messenger: 'whatsapp', mt_place: 'cta', mt_id: 'whatsapp_cta', mt_page: '/uslugi/' }
+```
+
+В GTM:
+1. Переменные типа «Переменная уровня данных»: `mt_messenger`, `mt_place`, `mt_id`, `mt_page`.
+2. Триггер «Пользовательское событие» с именем `messenger_click`.
+3. Тег «Google Analytics: событие GA4», имя события `messenger_click`, параметры `messenger`, `place`, `link_id`, `page_path` из переменных выше, триггер из п. 2.
+4. В GA4: Администратор, Специальные определения, параметры события `messenger` и `place` как специальные параметры (уровень события), чтобы видеть их в отчётах.
+
+Если GA4 стоит кодом gtag.js (`window.gtag` есть), событие `messenger_click` с теми же параметрами уходит напрямую, GTM не нужен.
+
 ## Настройки
 
 Через атрибуты тега `<script>` (без фигурных скобок, поэтому безопасно в шаблонах MODX/Fenom, Smarty, Twig, Blade):
@@ -54,6 +70,7 @@ A tiny dependency-free script (6 KB minified, 3 KB gzip) that sends every click 
 | `data-ym` | номер счётчика Метрики |
 | `data-goals` | цели через запятую, `%place%`, `%messenger%`, `%id%` подставляются |
 | `data-debug` | печатать каждый клик в консоль |
+| `data-lang` | язык плашки режима проверки: `ru` или `en` (по умолчанию по `<html lang>`, в адресе можно `&mt_lang=en`) |
 
 Или объектом до подключения скрипта:
 
@@ -88,7 +105,7 @@ window.MessengerTrackerConfig = {
 
 ## Проверка на своём сайте
 
-Откройте любую страницу с `?mt_debug=1` в адресе (например `https://site.ru/kontakty/?mt_debug=1`) и нажмите кнопки мессенджеров. В режиме проверки ссылки не открываются, а внизу слева на каждый клик всплывает плашка: мессенджер, место, страница и статус отправки, вплоть до «✓ Метрика 12345678 приняла: messenger_click, messenger_footer». Если счётчика нет (например, не дано согласие на cookie), плашка так и скажет. Клики в этом режиме настоящие и попадают в Метрику: удобно для приёмки, записи видео и показа клиенту.
+Откройте любую страницу с `?mt_debug=1` в адресе (например `https://site.ru/kontakty/?mt_debug=1`) и нажмите кнопки мессенджеров. В режиме проверки ссылки не открываются, а внизу слева на каждый клик всплывает плашка: мессенджер, место, страница и статус отправки, вплоть до «✓ Метрика 12345678 приняла: messenger_click, messenger_footer». Если счётчика нет (например, не дано согласие на cookie), плашка так и скажет. Отдельными строками плашка показывает, что ушло в GA4 (gtag) и в `dataLayer` для GTM. Язык плашки: `&mt_lang=en` или `&mt_lang=ru`. Клики в этом режиме настоящие и попадают в Метрику: удобно для приёмки, записи видео и показа клиенту.
 
 В консоли браузера:
 

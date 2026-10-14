@@ -1,4 +1,4 @@
-/*! messenger-tracker v1.3.0 | MIT | https://github.com/trendbender/messenger-tracker
+/*! messenger-tracker v1.4.0 | MIT | https://github.com/trendbender/messenger-tracker
  * Which messenger button was clicked, where on the page, and on which page.
  * Sends the click to Yandex Metrica (reachGoal + visit params), GA4 (gtag) and GTM (dataLayer).
  * No dependencies, ES5, 6 KB minified (3 KB gzip). Does NOT load any counter itself: if the counter is not
@@ -72,24 +72,38 @@
   }
 
   // Check mode (?mt_debug=1 in the address): links do not open, every click shows a toast
-  // with what was sent and whether Metrica acknowledged it. For QA, screen recordings, clients.
+  // with what was sent where and whether Metrica acknowledged it. For QA, screen recordings, clients.
+  // Toast language: data-lang / cfg.lang / ?mt_lang=en|ru, else by <html lang> (ru* -> ru, other -> en).
   var CHECK = /[?&]mt_debug=1/.test(w.location.search);
+  var LANG = (/[?&]mt_lang=(\w+)/.exec(w.location.search) || [])[1] || (me && me.getAttribute('data-lang')) || cfg.lang ||
+    (/^ru/i.test(d.documentElement.getAttribute('lang') || '') ? 'ru' : 'en');
+  var T = {
+    ru: { wait: 'Метрика: ждём счётчик…', sent: 'Метрика %c: отправлено %g, ждём ответ…', ok: '✓ Метрика %c приняла: %g',
+          gone: '✗ Метрика: счётчик на странице не появился', ga: '→ GA4 (gtag): событие %g', gtm: '→ dataLayer (GTM): событие %g' },
+    en: { wait: 'Yandex Metrica: waiting for the counter…', sent: 'Yandex Metrica %c: sent %g, waiting…', ok: '✓ Yandex Metrica %c received: %g',
+          gone: '✗ Yandex Metrica: counter did not appear on the page', ga: '→ GA4 (gtag): event %g', gtm: '→ dataLayer (GTM): event %g' }
+  };
+  function t(key, c, g) { return (T[LANG] || T.en)[key].replace('%c', c).replace('%g', g); }
 
   function toast(info) {
     var box = d.getElementById('mt-check');
     if (!box) {
       box = d.createElement('div'); box.id = 'mt-check';
       box.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;display:flex;flex-direction:column;gap:6px;' +
-        'max-width:min(400px,calc(100vw - 24px));font:13px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif';
+        'max-width:min(420px,calc(100vw - 24px));font:13px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif';
       d.body.appendChild(box);
     }
-    var el = d.createElement('div'), head = d.createElement('div'), line = d.createElement('div');
+    var el = d.createElement('div'), head = d.createElement('div'), lines = {};
     el.style.cssText = 'background:#111827;color:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.35)';
     head.style.fontWeight = '600';
     head.textContent = 'messenger-tracker: ' + info.messenger + ' · ' + info.place + ' · ' + info.page;
-    el.appendChild(head); el.appendChild(line); box.appendChild(el);
+    el.appendChild(head); box.appendChild(el);
     setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 30000);
-    return function (text, color) { line.textContent = text; line.style.color = color || '#cbd5e1'; };
+    // one line per channel (ym, ga, gtm), updated in place
+    return function (channel, text, color) {
+      if (!lines[channel]) { lines[channel] = d.createElement('div'); el.appendChild(lines[channel]); }
+      lines[channel].textContent = text; lines[channel].style.color = color || '#cbd5e1';
+    };
   }
 
   function send(info, done) {
@@ -105,14 +119,14 @@
       var params = {}; params[key] = {}; params[key][info.messenger] = {}; params[key][info.messenger][info.place] = info.page;
       var names = [], acked = 0;
       function ack() {
-        if (say && ++acked === goals.length) say('✓ Метрика ' + ymId + ' приняла: ' + names.join(', '), '#86efac');
+        if (say && ++acked === goals.length) say('ym', t('ok', ymId, names.join(', ')), '#86efac');
         if (cb) cb();
       }
       for (var i = 0; i < goals.length; i++) {
         names.push(fill(goals[i], info));
         w.ym(ymId, 'reachGoal', names[i], i === 0 ? params : undefined, ack);
       }
-      if (say) say('Метрика ' + ymId + ': отправлено ' + names.join(', ') + ', ждём ответ…');
+      if (say) say('ym', t('sent', ymId, names.join(', ')));
       return goals.length;
     }
     if (ymId && typeof w.ym === 'function') {
@@ -124,27 +138,27 @@
       var waited = 0, step = 100;
       var limit = done ? (cfg.waitNavigate != null ? cfg.waitNavigate : 1000) : (cfg.waitCounter != null ? cfg.waitCounter : 5000);
       if (done) pending++; // hold navigation until the counter shows up or we give up
-      if (say) say('ждём счётчик Метрики…');
+      if (say) say('ym', t('wait'));
       var timer = setInterval(function () {
         waited += step;
         if (typeof w.ym === 'function') { clearInterval(timer); if (done) { pending += toMetrica(one); one(); } else toMetrica(); }
         else if (waited >= limit) {
           clearInterval(timer); if (done) one();
-          if (say) say('✗ счётчик Метрики на странице не появился', '#fca5a5');
+          if (say) say('ym', t('gone'), '#fca5a5');
         }
       }, step);
-    } else if (say) {
-      say('Метрика не настроена (data-ym)', '#fca5a5');
     }
     // GA4
     if (cfg.gtag !== false && typeof w.gtag === 'function') {
       w.gtag('event', cfg.gaEvent || 'messenger_click', {
         messenger: info.messenger, place: info.place, link_id: info.id, page_path: info.page
       });
+      if (say) say('ga', t('ga', '', cfg.gaEvent || 'messenger_click'), '#93c5fd');
     }
     // GTM
     if (cfg.dataLayer !== false && w.dataLayer && typeof w.dataLayer.push === 'function') {
       w.dataLayer.push({ event: cfg.gaEvent || 'messenger_click', mt_messenger: info.messenger, mt_place: info.place, mt_id: info.id, mt_page: info.page });
+      if (say) say('gtm', t('gtm', '', cfg.gaEvent || 'messenger_click'), '#93c5fd');
     }
     // Anyone else on the page
     try { d.dispatchEvent(new CustomEvent('messenger-tracker:click', { detail: info })); } catch (e) {}
@@ -206,5 +220,5 @@
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', decorate); else decorate();
   }
 
-  w.MessengerTracker = { version: '1.3.0', config: cfg, scan: scan, describe: describe };
+  w.MessengerTracker = { version: '1.4.0', config: cfg, scan: scan, describe: describe };
 })(window, document);

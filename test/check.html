@@ -12,6 +12,7 @@
 <script>
   var calls = [];
   window.ym = function () { var a = [].slice.call(arguments); calls.push(a); if (typeof a[4] === 'function') setTimeout(a[4], 5); };
+  window.dataLayer = [];
   window.MessengerTrackerConfig = { waitCounter: 300 };
 </script>
 <script src="../messenger-tracker.js" data-ym="12345" data-goals="messenger_click,messenger_%place%"></script>
@@ -22,21 +23,26 @@ window.addEventListener('load', function () {
     var g = JSON.stringify(got), e = JSON.stringify(exp), ok = g === e; ok ? passed++ : failed++;
     out.innerHTML += '<span class="' + (ok ? 'ok' : 'fail') + '">' + (ok ? 'ok  ' : 'FAIL') + '</span> ' + name + (ok ? '' : '\n     got ' + g + '\n     exp ' + e) + '\n';
   }
-  function lines() { return [].map.call(document.querySelectorAll('#mt-check > div'), function (el) { return el.textContent; }); }
+  function lines() { return [].map.call(document.querySelectorAll('#mt-check > div'), function (el) { return [].map.call(el.children, function (c) { return c.textContent; }); }); }
+  var RU = /mt_lang=ru/.test(location.search);
+  var OK = RU ? '✓ Метрика 12345 приняла: messenger_click, messenger_content' : '✓ Yandex Metrica 12345 received: messenger_click, messenger_content';
+  var GONE = RU ? '✗ Метрика: счётчик на странице не появился' : '✗ Yandex Metrica: counter did not appear on the page';
+  var GTM = RU ? '→ dataLayer (GTM): событие messenger_click' : '→ dataLayer (GTM): event messenger_click';
   if (!/mt_debug=1/.test(location.search)) { out.textContent = 'open with ?mt_debug=1\n0 passed, 1 failed'; return; }
 
   var notCancelled = document.getElementById('wa').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
   eq('check mode: same-tab link does not navigate', notCancelled, false);
   eq('check mode: goals sent', calls.map(function (c) { return c[2]; }), ['messenger_click', 'messenger_content']);
-  eq('toast header', lines()[0].indexOf('messenger-tracker: whatsapp · content · ') === 0, true);
+  eq('toast header', lines()[0][0].indexOf('messenger-tracker: whatsapp · content · ') === 0, true);
+  eq('toast: dataLayer line (' + (RU ? 'ru' : 'en') + ')', lines()[0].indexOf(GTM) > 0, true);
 
   setTimeout(function () {
-    eq('toast shows Metrica acknowledged', /✓ Метрика 12345 приняла: messenger_click, messenger_content$/.test(lines()[0]), true);
+    eq('toast shows Metrica acknowledged (' + (RU ? 'ru' : 'en') + ')', lines()[0][1], OK);
     window.ym = undefined;
     var nc = document.getElementById('tg').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     eq('check mode: new-tab link does not open either', nc, false);
     setTimeout(function () {
-      eq('toast shows missing counter', /✗ счётчик Метрики на странице не появился$/.test(lines()[1]), true);
+      eq('toast shows missing counter', lines()[1][1], GONE);
       out.innerHTML += '\n' + passed + ' passed, ' + failed + ' failed\n';
     }, 600);
   }, 100);

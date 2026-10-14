@@ -10,6 +10,7 @@ run() {
 }
 OUT="$(run index.html)"
 CHECK="$(run 'check.html?mt_debug=1')"
+CHECK_RU="$(run 'check.html?mt_debug=1&mt_lang=ru')"
 rm -rf "$PROFILE"
-echo "$OUT"; echo "-- check mode --"; echo "$CHECK"
-echo "$OUT" | grep -q ' 0 failed' && echo "$CHECK" | grep -q ' 0 failed' || exit 1
+echo "$OUT"; echo "-- check mode (en) --"; echo "$CHECK"; echo "-- check mode (ru) --"; echo "$CHECK_RU"
+for r in "$OUT" "$CHECK" "$CHECK_RU"; do echo "$r" | grep -q ' 0 failed' || exit 1; done
