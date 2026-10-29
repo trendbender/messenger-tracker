@@ -59,7 +59,7 @@ window.addEventListener('load', function () {
   var page = location.pathname;
   var T = MessengerTracker;
 
-  eq('version', T.version, '1.4.0');
+  eq('version', T.version, '1.4.1');
   eq('config from <script data-*>', [T.config.ym, T.config.goals], [12345, ['messenger_click', 'messenger_%place%']]);
 
   var s = T.scan().map(function (i) { return i.id; });

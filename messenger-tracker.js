@@ -1,4 +1,4 @@
-/*! messenger-tracker v1.4.0 | MIT | https://github.com/trendbender/messenger-tracker
+/*! messenger-tracker v1.4.1 | MIT | https://github.com/trendbender/messenger-tracker
  * Which messenger button was clicked, where on the page, and on which page.
  * Sends the click to Yandex Metrica (reachGoal + visit params), GA4 (gtag) and GTM (dataLayer).
  * No dependencies, ES5, 6 KB minified (3 KB gzip). Does NOT load any counter itself: if the counter is not
@@ -17,18 +17,20 @@
   if (me && me.hasAttribute('data-debug')) cfg.debug = true;
   var ATTR = cfg.attr || 'data-mt';
 
-  // [name, test(href)] — order matters: first match wins
+  // [name, test(href)] — order matters: first match wins.
+  // Host part accepts http(s)://, protocol-relative // and www. ; paths end at / ? # so vk.com/imperia is not a chat
   var MESSENGERS = [
-    ['whatsapp', /^(?:https?:\/\/)?(?:wa\.me|(?:api|web|chat)\.whatsapp\.com)\/|^whatsapp:/i],
-    ['telegram', /^(?:https?:\/\/)?(?:t\.me|telegram\.me|telegram\.dog)\/|^tg:/i],
-    ['max', /^(?:https?:\/\/)?(?:www\.)?max\.ru\/|^max:/i],
-    ['yandex_messenger', /^(?:https?:\/\/)?(?:yandex\.ru|ya\.ru)\/chat/i],
-    ['vk', /^(?:https?:\/\/)?(?:vk\.me\/|(?:m\.)?vk\.(?:com|ru)\/(?:im|write))/i],
+    ['whatsapp', /^(?:(?:https?:)?\/\/)?(?:www\.)?(?:wa\.me|(?:api|web|chat)\.whatsapp\.com)\/|^whatsapp:/i],
+    ['telegram', /^(?:(?:https?:)?\/\/)?(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)\/|^tg:/i],
+    ['max', /^(?:(?:https?:)?\/\/)?(?:www\.|web\.)?max\.ru\/|^max:/i],
+    ['yandex_messenger', /^(?:(?:https?:)?\/\/)?(?:www\.)?(?:yandex\.ru|ya\.ru)\/chat(?:[\/?#]|$)/i],
+    ['vk', /^(?:(?:https?:)?\/\/)?(?:www\.)?(?:vk\.me\/|(?:m\.)?vk\.(?:com|ru)\/(?:im(?:[\/?#]|$)|write-?\d))/i],
     ['viber', /^viber:/i]
   ].concat(cfg.messengers || []);
 
-  // Fallback places by page landmark, when neither data-mt-place nor cfg.places matched
-  var LANDMARKS = [['header', 'header'], ['footer', 'footer'], ['nav', 'nav'], ['aside', 'aside'], ['main,article', 'content']];
+  // Fallback places by page landmark, when neither data-mt-place nor cfg.places matched.
+  // article goes first: <article><header>/<footer> is part of the content, not the site header/footer
+  var LANDMARKS = [['article', 'content'], ['header', 'header'], ['footer', 'footer'], ['nav', 'nav'], ['aside', 'aside'], ['main', 'content']];
 
   function closest(el, sel) {
     for (; el && el.nodeType === 1; el = el.parentNode) {
@@ -43,7 +45,7 @@
   }
 
   function placeOf(a) {
-    var own = closest(a, '[' + ATTR + '-place]');
+    var own = closest(a, '[' + ATTR + '-place]:not([' + ATTR + '-place=""])');
     if (own) return own.getAttribute(ATTR + '-place');
     var places = cfg.places || [];
     for (var i = 0; i < places.length; i++) if (closest(a, places[i][0])) return places[i][1];
@@ -53,7 +55,7 @@
 
   // Everything we know about one link; null if it is not a messenger link
   function describe(a) {
-    var href = a.getAttribute('href') || '';
+    var href = (a.getAttribute('href') || '').replace(/^\s+|\s+$/g, ''); // the browser ignores them too
     var messenger = a.getAttribute(ATTR + '-messenger') || messengerOf(href);
     if (!messenger) return null;
     var place = placeOf(a);
@@ -66,9 +68,28 @@
     };
   }
 
+  // Metrica ClientID of this visitor: from getClientID once the counter answers, else from its _ym_uid cookie
+  var cid = '';
+  function askClientId() {
+    if (cid || !cfg.ym || typeof w.ym !== 'function') return;
+    try { w.ym(cfg.ym, 'getClientID', function (id) { if (id) cid = String(id); }); } catch (e) {}
+  }
+  function clientId() {
+    askClientId();
+    var m = /(?:^|;\s*)_ym_uid=(\d+)/.exec(d.cookie || '');
+    return cid || (m ? m[1] : '');
+  }
+
   function fill(tpl, info) {
-    // {place} or %place% (the latter survives template engines that eat curly braces)
-    return String(tpl).replace(/\{(\w+)\}|%(\w+)%/g, function (m, a, b) { var k = a || b; return info[k] != null ? info[k] : m; });
+    // {place} or %place% (the latter survives template engines that eat curly braces); %cid% = Metrica ClientID
+    var re = /\{(\w+)\}|%(\w+)%/g;
+    function val(k) { return k === 'cid' ? clientId() : info[k]; }
+    // a (...) group whose placeholder is empty (no ClientID yet) is dropped: 'Hi (code %cid%)' -> 'Hi'
+    return String(tpl).replace(/\s*\([^()]*\)/g, function (g) {
+      var empty = false;
+      g.replace(re, function (m, a, b) { if (val(a || b) === '') empty = true; return m; });
+      return empty ? '' : g;
+    }).replace(re, function (m, a, b) { var v = val(a || b); return v != null ? v : m; });
   }
 
   // Check mode (?mt_debug=1 in the address): links do not open, every click shows a toast
@@ -79,11 +100,11 @@
     (/^ru/i.test(d.documentElement.getAttribute('lang') || '') ? 'ru' : 'en');
   var T = {
     ru: { wait: 'Метрика: ждём счётчик…', sent: 'Метрика %c: отправлено %g, ждём ответ…', ok: '✓ Метрика %c приняла: %g',
-          gone: '✗ Метрика: счётчик на странице не появился', ga: '→ GA4 (gtag): событие %g', gtm: '→ dataLayer (GTM): событие %g' },
+          gone: '✗ Метрика: счётчик на странице не появился', ga: '→ GA4 (gtag): событие %g', gtm: '→ dataLayer (GTM): событие %g', text: 'В ссылку добавлено: %g' },
     en: { wait: 'Yandex Metrica: waiting for the counter…', sent: 'Yandex Metrica %c: sent %g, waiting…', ok: '✓ Yandex Metrica %c received: %g',
-          gone: '✗ Yandex Metrica: counter did not appear on the page', ga: '→ GA4 (gtag): event %g', gtm: '→ dataLayer (GTM): event %g' }
+          gone: '✗ Yandex Metrica: counter did not appear on the page', ga: '→ GA4 (gtag): event %g', gtm: '→ dataLayer (GTM): event %g', text: 'Added to the link: %g' }
   };
-  function t(key, c, g) { return (T[LANG] || T.en)[key].replace('%c', c).replace('%g', g); }
+  function t(key, c, g) { return (T[LANG] || T.en)[key].replace('%c', function () { return c; }).replace('%g', function () { return g; }); }
 
   function toast(info) {
     var box = d.getElementById('mt-check');
@@ -160,6 +181,7 @@
       w.dataLayer.push({ event: cfg.gaEvent || 'messenger_click', mt_messenger: info.messenger, mt_place: info.place, mt_id: info.id, mt_page: info.page });
       if (say) say('gtm', t('gtm', '', cfg.gaEvent || 'messenger_click'), '#93c5fd');
     }
+    if (say && info.text) say('text', t('text', '', info.text), '#fde68a');
     // Anyone else on the page
     try { d.dispatchEvent(new CustomEvent('messenger-tracker:click', { detail: info })); } catch (e) {}
     if (cfg.debug || CHECK) {
@@ -174,6 +196,8 @@
     if (!a) return;
     var info = describe(a);
     if (!info) return;
+    var text = personalize(a, info);
+    if (text) info.text = text;
     if (CHECK) { e.preventDefault(); send(info); return; } // check mode: count, but stay on the page
 
     // Same-tab http(s) navigation would unload the page before the hit leaves: wait for it (max 300 ms)
@@ -182,29 +206,50 @@
       (!a.target || a.target === '_self') && /^https?:/i.test(a.href);
     if (!sameTab) { send(info); return; }
 
-    e.preventDefault();
-    var gone = false;
-    function go() { if (!gone) { gone = true; w.location.href = a.href; } }
-    send(info, go);
-    // safety net: never hold the visitor longer than this, even if the counter never answers
-    var late = cfg.ym && typeof w.ym !== 'function';
-    setTimeout(go, (cfg.timeout || 300) + (late ? (cfg.waitNavigate != null ? cfg.waitNavigate : 1000) : 0));
+    // Decide once the page's own handlers have run (bubble phase on window): if one of them cancelled the click
+    // (popup, chat widget, onclick="return false"), only count it and do not navigate. A handler that stops
+    // propagation keeps the event from reaching window, so we decide right at that call; the timeout is a last resort.
+    var decided = false;
+    function decide(e2) {
+      if (decided || (e2 && e2 !== e)) return;
+      decided = true;
+      w.removeEventListener('click', decide, false);
+      if (!e2 || e.defaultPrevented) { send(info); return; }
+      e.preventDefault();
+      var gone = false;
+      function go() { if (!gone) { gone = true; w.location.href = a.href; } }
+      send(info, go);
+      // safety net: never hold the visitor longer than this, even if the counter never answers
+      var late = cfg.ym && typeof w.ym !== 'function';
+      setTimeout(go, (cfg.timeout || 300) + (late ? (cfg.waitNavigate != null ? cfg.waitNavigate : 1000) : 0));
+    }
+    w.addEventListener('click', decide, false);
+    e.stopPropagation = function () { decide(e); return Event.prototype.stopPropagation.call(e); };
+    e.stopImmediatePropagation = function () { decide(e); return Event.prototype.stopImmediatePropagation.call(e); };
+    setTimeout(decide, 0);
   }
 
-  // Optional offline attribution: the code shows up in the chat itself
+  // Optional offline attribution: the code shows up in the chat itself.
+  // Done on page load and again on every click (the ClientID may only be known by then, SPA pages add links later);
+  // the original href is kept in data-mt-href. Returns the prefilled text, if any.
+  function personalize(a, info) {
+    var base = a.getAttribute(ATTR + '-href') || info.href, text;
+    if (cfg.whatsappText && info.messenger === 'whatsapp' && /wa\.me\/\d+\/?$/i.test(base)) {
+      text = fill(cfg.whatsappText, info);
+      a.setAttribute(ATTR + '-href', base);
+      a.setAttribute('href', base.replace(/\/$/, '') + '?text=' + encodeURIComponent(text));
+    }
+    // ?start= works only for bots (username ending in "bot"); Telegram allows A-Z a-z 0-9 _ - and 64 chars
+    if (cfg.telegramStart && info.messenger === 'telegram' && /t\.me\/\w*bot\/?$/i.test(base)) {
+      text = fill(cfg.telegramStart, info).replace(/[^\w-]/g, '_').slice(0, 64);
+      a.setAttribute(ATTR + '-href', base);
+      a.setAttribute('href', base.replace(/\/$/, '') + '?start=' + text);
+    }
+    return text;
+  }
   function decorate() {
     var links = d.querySelectorAll('a[href]');
-    for (var i = 0; i < links.length; i++) {
-      var a = links[i], info = describe(a);
-      if (!info) continue;
-      if (cfg.whatsappText && info.messenger === 'whatsapp' && /wa\.me\/\d+\/?$/i.test(info.href)) {
-        a.setAttribute('href', info.href.replace(/\/$/, '') + '?text=' + encodeURIComponent(fill(cfg.whatsappText, info)));
-      }
-      // ?start= works only for bots (username ending in "bot")
-      if (cfg.telegramStart && info.messenger === 'telegram' && /t\.me\/\w*bot\/?$/i.test(info.href)) {
-        a.setAttribute('href', info.href.replace(/\/$/, '') + '?start=' + encodeURIComponent(fill(cfg.telegramStart, info)).slice(0, 64));
-      }
-    }
+    for (var i = 0; i < links.length; i++) { var info = describe(links[i]); if (info) personalize(links[i], info); }
   }
 
   // Inventory for audits and debugging: MessengerTracker.scan() in the console
@@ -217,8 +262,9 @@
   d.addEventListener('click', onClick, true);
   d.addEventListener('auxclick', onClick, true);
   if (cfg.whatsappText || cfg.telegramStart) {
+    askClientId();
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', decorate); else decorate();
   }
 
-  w.MessengerTracker = { version: '1.4.0', config: cfg, scan: scan, describe: describe };
+  w.MessengerTracker = { version: '1.4.1', config: cfg, scan: scan, describe: describe };
 })(window, document);
